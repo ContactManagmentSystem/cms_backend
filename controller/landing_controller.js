@@ -87,7 +87,8 @@ exports.updateLanding = tryCatch(async (req, res) => {
   if (storeName) landing.storeName = storeName;
   if (colourCode) landing.colourCode = colourCode;
   if (file) {
-    landing.image = `${req.protocol}://${req.get("host")}/${file.path}`;
+    // landing.image = `${req.protocol}://${req.get("host")}/${file.path}`;
+    landing.image = `https://cms.justlwint.com/${file.path}`;
   }
 
   await landing.save();
