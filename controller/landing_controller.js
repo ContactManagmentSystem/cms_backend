@@ -28,7 +28,8 @@ exports.createLanding = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "You already have a landing page.");
   }
 
-  const imageUrl = `${req.protocol}://${req.get("host")}/${file.path}`;
+  // const imageUrl = `${req.protocol}://${req.get("host")}/${file.path}`;
+  const imageUrl = `https://cms.justlwint.com/${file.path}`;
 
   const landing = await Landing.create({
     storeName,
