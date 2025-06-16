@@ -70,7 +70,7 @@ exports.createProduct = tryCatch(async (req, res) => {
 
   // Prepare image URLs
   const imageUrls = files.map(
-    (file) => `${req.protocol}://${req.get("host")}/${file.path}`
+    (file) => `https://olivermenus.com/${file.path}`
   );
 
   // Create product
@@ -192,7 +192,7 @@ exports.updateProduct = tryCatch(async (req, res) => {
         const imgPath = path.join(
           __dirname,
           "..",
-          imgUrl.replace(`${req.protocol}://${req.get("host")}/`, "")
+          imgUrl.replace(`https://olivermenus.com/`, "")
         );
         if (fs.existsSync(imgPath)) {
           fs.unlinkSync(imgPath);
@@ -220,7 +220,7 @@ exports.updateProduct = tryCatch(async (req, res) => {
   // Add new uploaded images
   if (files && files.length > 0) {
     const newImages = files.map(
-      (file) => `${req.protocol}://${req.get("host")}/${file.path}`
+      (file) => `https://olivermenus.com/${file.path}`
     );
     currentImages = [...currentImages, ...newImages];
   }
