@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const orderSchema = new mongoose.Schema(
   {
+    orderCode: {
+      type: String,
+      unique: true,
+      required: true,
+    },
     products: [
       {
         productId: {
@@ -76,11 +81,37 @@ const orderSchema = new mongoose.Schema(
     },
     siteOwner: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // or "Admin" depending on your user model
+      ref: "User",
       required: true,
     },
   },
   { timestamps: true }
 );
+
+// 🔠 Generate 7-character code (uppercase + numbers)
+function generateOrderCode() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 7; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+// 🛠 Ensure unique orderCode before saving
+orderSchema.pre("validate", async function (next) {
+  if (!this.orderCode) {
+    let code;
+    let exists = true;
+
+    while (exists) {
+      code = generateOrderCode();
+      exists = await mongoose.models.Order.findOne({ orderCode: code });
+    }
+
+    this.orderCode = code;
+  }
+  next();
+});
 
 module.exports = mongoose.model("Order", orderSchema);

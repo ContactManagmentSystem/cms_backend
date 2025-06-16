@@ -18,6 +18,10 @@ const landingSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  heroImage: {
+    type: [String],
+    default: [],
+  },
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
@@ -26,7 +30,7 @@ const landingSchema = new mongoose.Schema({
   acceptPaymentTypes: {
     type: [String],
     enum: ["COD", "Prepaid"],
-    default: ["COD"], 
+    default: ["COD"],
   },
   createdAt: {
     type: Date,

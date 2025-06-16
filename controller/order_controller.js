@@ -27,9 +27,8 @@ exports.createOrder = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "Missing required fields.");
   }
 
-  const normalizedPaymentType = paymentType.trim(); // Use as-is to match enum
+  const normalizedPaymentType = paymentType.trim();
 
-  // Validate store landing and accepted payment types
   const landing = await Landing.findOne({ owner: siteOwner }).lean();
   if (!landing) {
     return sendResponse(res, 404, null, "Store landing not found.");
@@ -45,7 +44,6 @@ exports.createOrder = tryCatch(async (req, res) => {
     );
   }
 
-  // Validate products and calculate total
   let totalAmount = 0;
   const verifiedProducts = [];
 
@@ -59,12 +57,16 @@ exports.createOrder = tryCatch(async (req, res) => {
       return sendResponse(res, 404, null, `Product not found: ${productId}`);
     }
 
-    const price = product.discountPrice || product.price;
+    const discount =
+      product.discountPrice && product.discountPrice > 0
+        ? product.discountPrice
+        : 0;
+    const price = product.price - discount;
+
     totalAmount += price * quantity;
     verifiedProducts.push({ productId: product._id, quantity });
   }
 
-  // Validate Prepaid Payment
   let transactionScreenshot = null;
   let finalPaymentDetails = {};
 
@@ -98,7 +100,6 @@ exports.createOrder = tryCatch(async (req, res) => {
     finalPaymentDetails = paymentDetails;
   }
 
-  // Create the order
   const order = await Order.create({
     products: verifiedProducts,
     totalAmount,
@@ -113,6 +114,7 @@ exports.createOrder = tryCatch(async (req, res) => {
 
   return sendResponse(res, 201, order, "Order placed successfully.");
 });
+
 
 
 // Get all orders by admin
