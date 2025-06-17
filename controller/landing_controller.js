@@ -30,13 +30,13 @@ exports.createLanding = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "You already have a landing page.");
   }
 
-  const imageUrl = `https://olivermenus.com/${
+  const imageUrl = `https://backend.olivermenus.com/${
     files.image[0].path
     }`;
   
   const heroImageUrls =
     files.heroImage?.map(
-      (file) => `https://olivermenus.com/${file.path}`
+      (file) => `https://backend.olivermenus.com/${file.path}`
     ) || [];
 
   const landing = await Landing.create({
@@ -78,7 +78,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
 
   // Handle main image replacement
   if (files?.image?.length > 0) {
-    landing.image = `https://olivermenus.com/${
+    landing.image = `https://backend.olivermenus.com/${
       files.image[0].path
     }`;
   }
@@ -94,7 +94,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
         const imgPath = path.join(
           __dirname,
           "..",
-          imgUrl.replace(`https://olivermenus.com/`, "")
+          imgUrl.replace(`https://backend.olivermenus.com/`, "")
         );
         if (fs.existsSync(imgPath)) {
           fs.unlinkSync(imgPath);
@@ -125,7 +125,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
   // Add new hero images
   if (files?.heroImage?.length > 0) {
     const newHeroImages = files.heroImage.map(
-      (file) => `https://olivermenus.com/${file.path}`
+      (file) => `https://backend.olivermenus.com/${file.path}`
     );
     currentHeroImages = [...currentHeroImages, ...newHeroImages];
   }

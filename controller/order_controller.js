@@ -94,7 +94,7 @@ exports.createOrder = tryCatch(async (req, res) => {
       return sendResponse(res, 404, null, "Payment account not found.");
     }
 
-    transactionScreenshot = `https://olivermenus.com/${
+    transactionScreenshot = `https://backend.olivermenus.com/${
       req.file.path
     }`;
     finalPaymentDetails = paymentDetails;
@@ -207,7 +207,7 @@ exports.deleteOrder = tryCatch(async (req, res) => {
       __dirname,
       "..",
       order.transactionScreenshot.replace(
-        `https://olivermenus.com/`,
+        `https://backend.olivermenus.com/`,
         ""
       )
     );

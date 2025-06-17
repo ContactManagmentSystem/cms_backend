@@ -16,7 +16,7 @@ exports.createCategory = tryCatch(async (req, res) => {
   const exists = await Category.findOne({ name }).lean();
   if (exists) return sendResponse(res, 400, null, "Category already exists.");
 
-  const imageUrl = `https://olivermenus.com/${file.path}`;
+  const imageUrl = `https://backend.olivermenus.com/${file.path}`;
 
   const category = await Category.create({
     name,
@@ -80,7 +80,7 @@ exports.updateCategory = tryCatch(async (req, res) => {
       });
     }
 
-    const imageUrl = `https://olivermenus.com/${file.path}`;
+    const imageUrl = `https://backend.olivermenus.com/${file.path}`;
     category.image = imageUrl;
   }
 
