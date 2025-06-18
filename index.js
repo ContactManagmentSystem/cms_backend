@@ -3,6 +3,7 @@ const connectDB = require("./db/mongo");
 const productRouter = require("./router/product");
 const categoryRouter = require("./router/category");
 const landingRouter = require("./router/landing");
+const socialRouter = require("./router/social");
 const paymentRouter = require("./router/payment");
 const userRouter = require("./router/user");
 const authRouter = require("./router/authorize");
@@ -30,6 +31,7 @@ connectDB()
     app.use("/api/v1/products", productRouter);
     app.use("/api/v1/cate", categoryRouter);
     app.use("/api/v1/landing", landingRouter);
+    app.use("/api/v1/social", socialRouter);
     app.use("/api/v1/payment", paymentRouter);
     // app.use("/api/v1/dashboard", dashboardRouter);
     app.use("/api/v1/orders", orderRouter);

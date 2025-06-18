@@ -94,12 +94,11 @@ exports.createOrder = tryCatch(async (req, res) => {
       return sendResponse(res, 404, null, "Payment account not found.");
     }
 
-    transactionScreenshot = `https://backend.olivermenus.com/${
-      req.file.path
-    }`;
+    transactionScreenshot = `https://backend.olivermenus.com/${req.file.path}`;
     finalPaymentDetails = paymentDetails;
   }
 
+  // Progress is "pending" by default — orderCode is not required here.
   const order = await Order.create({
     products: verifiedProducts,
     totalAmount,
@@ -110,11 +109,12 @@ exports.createOrder = tryCatch(async (req, res) => {
     transactionScreenshot,
     paymentDetails: finalPaymentDetails,
     siteOwner,
+    progress: "pending", 
+    
   });
 
   return sendResponse(res, 201, order, "Order placed successfully.");
 });
-
 
 
 // Get all orders by admin
@@ -133,7 +133,7 @@ exports.getOrders = tryCatch(async (req, res) => {
 // Update order progress
 exports.updateOrderProgress = tryCatch(async (req, res) => {
   const { id } = req.params;
-  const { progress } = req.body;
+  const { progress, orderCode, reason } = req.body;
   const adminId = req.userId;
 
   const validProgress = ["pending", "accepted", "declined", "done"];
@@ -152,6 +152,43 @@ exports.updateOrderProgress = tryCatch(async (req, res) => {
 
   if (order.progress === "done") {
     return sendResponse(res, 400, null, "Completed orders cannot be modified.");
+  }
+
+  // Require reason if declined
+  if (progress === "declined" && !reason) {
+    return sendResponse(
+      res,
+      400,
+      null,
+      "Reason is required when declining an order."
+    );
+  }
+
+  // Require orderCode if accepted or done
+  if ((progress === "accepted" || progress === "done") && !orderCode) {
+    return sendResponse(
+      res,
+      400,
+      null,
+      "Order code is required when accepting or completing an order."
+    );
+  }
+
+  // Check for duplicate orderCode if provided
+  if (
+    (progress === "accepted" || progress === "done") &&
+    orderCode !== order.orderCode
+  ) {
+    const existing = await Order.findOne({ orderCode });
+    if (existing) {
+      return sendResponse(res, 409, null, "Order code already exists.");
+    }
+    order.orderCode = orderCode;
+  }
+
+  // Save reason if declined
+  if (progress === "declined") {
+    order.reason = reason;
   }
 
   // Deduct stock if marking as done

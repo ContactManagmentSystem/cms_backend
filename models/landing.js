@@ -32,6 +32,17 @@ const landingSchema = new mongoose.Schema({
     enum: ["COD", "Prepaid"],
     default: ["COD"],
   },
+  currency: {
+    type: String,
+    default: "MMK",
+    required: true,
+  },
+  socialLinks: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SocialLink",
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now,

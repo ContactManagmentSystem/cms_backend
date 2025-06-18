@@ -7,10 +7,15 @@ const { isValidObjectId } = require("../utils/is_valid_id");
 
 // Create a new landing (only one per admin)
 exports.createLanding = tryCatch(async (req, res) => {
-  const { storeName, colourCode } = req.body;
+  const { storeName, colourCode, currency = "MMK" } = req.body;
   const files = req.files;
 
-  if (!req.userId) return sendResponse(res, 400, null, "User ID is required.");
+  // Validation: Ensure user ID is provided
+  if (!req.userId) {
+    return sendResponse(res, 400, null, "User ID is required.");
+  }
+
+  // Validation: Ensure required fields are present
   if (!storeName || !colourCode) {
     return sendResponse(
       res,
@@ -20,31 +25,32 @@ exports.createLanding = tryCatch(async (req, res) => {
     );
   }
 
+  // Validation: Check main image upload
   if (!files || !files.image || files.image.length === 0) {
     return sendResponse(res, 400, null, "Main image file is required.");
   }
 
-  // Check if the user already has a landing
+  // Prevent multiple landing pages per user
   const existingLanding = await Landing.findOne({ owner: req.userId }).lean();
   if (existingLanding) {
     return sendResponse(res, 400, null, "You already have a landing page.");
   }
 
-  const imageUrl = `https://backend.olivermenus.com/${
-    files.image[0].path
-    }`;
-  
+  // Image processing
+  const imageUrl = `https://backend.olivermenus.com/${files.image[0].path}`;
   const heroImageUrls =
     files.heroImage?.map(
       (file) => `https://backend.olivermenus.com/${file.path}`
     ) || [];
 
+  // Create landing document (without socialLinks)
   const landing = await Landing.create({
     storeName,
     colourCode,
     image: imageUrl,
     heroImage: heroImageUrls,
     owner: req.userId,
+    currency,
   });
 
   return sendResponse(res, 201, landing, "Landing created successfully.");
@@ -78,9 +84,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
 
   // Handle main image replacement
   if (files?.image?.length > 0) {
-    landing.image = `https://backend.olivermenus.com/${
-      files.image[0].path
-    }`;
+    landing.image = `https://backend.olivermenus.com/${files.image[0].path}`;
   }
 
   // HERO IMAGE UPDATE LOGIC
@@ -185,17 +189,22 @@ exports.deleteLanding = tryCatch(async (req, res) => {
 // Public: Get landing page of a specific admin
 exports.getPublicLandingByAdmin = tryCatch(async (req, res) => {
   const { adminId } = req.params;
-
   if (!adminId) {
     return sendResponse(res, 400, null, "Admin ID is required.");
   }
 
-  const landing = await Landing.findOne({ owner: adminId }).lean();
+  const landing = await Landing.findOne({ owner: adminId })
+    .populate({
+      path: "socialLinks",
+      select: "name link icon",
+    })
+    .lean();
+
   if (!landing) {
     return sendResponse(res, 404, null, "Landing not found for this admin.");
   }
 
-  return sendResponse(res, 200, landing);
+  return sendResponse(res, 200, landing, "Landing fetched successfully.");
 });
 
 // Update only the acceptPaymentTypes for the landing (owner only)
