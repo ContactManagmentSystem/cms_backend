@@ -7,13 +7,11 @@ const socialRouter = require("./router/social");
 const paymentRouter = require("./router/payment");
 const userRouter = require("./router/user");
 const authRouter = require("./router/authorize");
-// const dashboardRouter = require("./router/dashboard");
 const orderRouter = require("./router/order");
 const notFound = require("./middleware/not_found");
 const errorHandler = require("./middleware/error_handler");
 const cors = require("cors");
 const path = require("path");
-
 const testing = require("./router/testing");
 
 const app = express();
@@ -22,10 +20,15 @@ const port = 7677;
 // Connect to the database
 connectDB()
   .then(() => {
-    app.use(express.json());
+    // Allow large JSON & form payloads (e.g., image uploads)
+    app.use(express.json({ limit: "50mb" }));
+    app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-    // Enable CORS for any origin
+    // Enable CORS
     app.use(cors());
+
+    // Static files
+    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
     // Register routers
     app.use("/api/v1/products", productRouter);
@@ -33,15 +36,12 @@ connectDB()
     app.use("/api/v1/landing", landingRouter);
     app.use("/api/v1/social", socialRouter);
     app.use("/api/v1/payment", paymentRouter);
-    // app.use("/api/v1/dashboard", dashboardRouter);
     app.use("/api/v1/orders", orderRouter);
     app.use("/api/v1/users", userRouter);
     app.use("/api/v1/auth", authRouter);
-
-    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
     app.use("/api/v1/file", testing);
 
-    // Error handling middlewares
+    // Error handling
     app.use(notFound);
     app.use(errorHandler);
 
