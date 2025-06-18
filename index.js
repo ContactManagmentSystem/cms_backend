@@ -17,7 +17,7 @@ const path = require("path");
 const testing = require("./router/testing");
 
 const app = express();
-const port = 8989;
+const port = 7677;
 
 // Connect to the database
 connectDB()
