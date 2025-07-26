@@ -70,33 +70,35 @@ exports.createOrder = tryCatch(async (req, res) => {
   let transactionScreenshot = null;
   let finalPaymentDetails = {};
 
-  if (normalizedPaymentType === "Prepaid") {
-    if (!req.file) {
-      return sendResponse(
-        res,
-        400,
-        null,
-        "Transaction screenshot is required."
-      );
-    }
-
-    if (
-      !paymentDetails ||
-      !paymentDetails.paymentPlatform ||
-      !paymentDetails.paymentPlatformUserName ||
-      !paymentDetails.accountId
-    ) {
-      return sendResponse(res, 400, null, "All payment details are required.");
-    }
-
-    const paymentAccount = await Payment.findById(paymentDetails.accountId);
-    if (!paymentAccount) {
-      return sendResponse(res, 404, null, "Payment account not found.");
-    }
-
-    transactionScreenshot = `https://backend.olivermenus.com/${req.file.path}`;
-    finalPaymentDetails = paymentDetails;
+if (normalizedPaymentType === "Prepaid") {
+  if (!req.file) {
+    return sendResponse(res, 400, null, "Transaction screenshot is required.");
   }
+
+  const { valid, reason } = await validateFileType(req.file.path);
+
+  if (!valid) {
+    await fs.unlink(req.file.path); 
+    return sendResponse(res, 400, null, `Invalid file: ${reason}`);
+  }
+
+  if (
+    !paymentDetails ||
+    !paymentDetails.paymentPlatform ||
+    !paymentDetails.paymentPlatformUserName ||
+    !paymentDetails.accountId
+  ) {
+    return sendResponse(res, 400, null, "All payment details are required.");
+  }
+
+  const paymentAccount = await Payment.findById(paymentDetails.accountId);
+  if (!paymentAccount) {
+    return sendResponse(res, 404, null, "Payment account not found.");
+  }
+
+  transactionScreenshot = `https://backend.olivermenus.com/${req.file.path}`;
+  finalPaymentDetails = paymentDetails;
+}
 
   // Progress is "pending" by default — orderCode is not required here.
   const order = await Order.create({

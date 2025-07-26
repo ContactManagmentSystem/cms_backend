@@ -7,6 +7,10 @@ const { isValidObjectId } = require("../utils/is_valid_id");
 exports.createPayment = tryCatch(async (req, res) => {
   const { platform, platformUserName, accountNumber } = req.body;
 
+  console.log(platform)
+  console.log(platformUserName);
+  console.log(accountNumber);
+  
   if (!req.userId) return sendResponse(res, 400, null, "User ID is required.");
   if (!platform || !platformUserName || !accountNumber) {
     return sendResponse(res, 400, null, "All fields are required.");

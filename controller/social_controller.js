@@ -7,6 +7,10 @@ const { checkParamId, checkIfEmpty } = require("../utils/is_valid_id");
 exports.createSocialLink = tryCatch(async (req, res) => {
   const { name, link, icon } = req.body;
   const { landingId } = req.params;
+  
+  console.log(name);
+  console.log(link);
+  console.log(icon);
 
   if (!name || !link || !icon) {
     return sendResponse(res, 400, null, "All fields are required.");
