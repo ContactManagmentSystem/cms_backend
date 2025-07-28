@@ -7,6 +7,7 @@ const { sendResponse } = require("../utils/response");
 const { isValidObjectId } = require("../utils/is_valid_id");
 const path = require("path");
 const fs = require("fs");
+const { validateFileType } = require("../utils/validate_file_type");
 
 exports.createOrder = tryCatch(async (req, res) => {
   const {
@@ -70,37 +71,39 @@ exports.createOrder = tryCatch(async (req, res) => {
   let transactionScreenshot = null;
   let finalPaymentDetails = {};
 
-if (normalizedPaymentType === "Prepaid") {
-  if (!req.file) {
-    return sendResponse(res, 400, null, "Transaction screenshot is required.");
+  if (normalizedPaymentType === "Prepaid") {
+    if (!req.file) {
+      return sendResponse(res, 400, null, "Transaction screenshot is required.");
+    }
+
+    //Secure file type validation
+    const { valid, reason } = await validateFileType(req.file.path);
+    if (!valid) {
+      // Clean up invalid file
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {}
+      return sendResponse(res, 400, null, `Invalid file: ${reason}`);
+    }
+
+    if (
+      !paymentDetails ||
+      !paymentDetails.paymentPlatform ||
+      !paymentDetails.paymentPlatformUserName ||
+      !paymentDetails.accountId
+    ) {
+      return sendResponse(res, 400, null, "All payment details are required.");
+    }
+
+    const paymentAccount = await Payment.findById(paymentDetails.accountId);
+    if (!paymentAccount) {
+      return sendResponse(res, 404, null, "Payment account not found.");
+    }
+
+    transactionScreenshot = `https://backend.olivermenus.com/${req.file.path}`;
+    finalPaymentDetails = paymentDetails;
   }
 
-  const { valid, reason } = await validateFileType(req.file.path);
-
-  if (!valid) {
-    await fs.unlink(req.file.path); 
-    return sendResponse(res, 400, null, `Invalid file: ${reason}`);
-  }
-
-  if (
-    !paymentDetails ||
-    !paymentDetails.paymentPlatform ||
-    !paymentDetails.paymentPlatformUserName ||
-    !paymentDetails.accountId
-  ) {
-    return sendResponse(res, 400, null, "All payment details are required.");
-  }
-
-  const paymentAccount = await Payment.findById(paymentDetails.accountId);
-  if (!paymentAccount) {
-    return sendResponse(res, 404, null, "Payment account not found.");
-  }
-
-  transactionScreenshot = `https://backend.olivermenus.com/${req.file.path}`;
-  finalPaymentDetails = paymentDetails;
-}
-
-  // Progress is "pending" by default — orderCode is not required here.
   const order = await Order.create({
     products: verifiedProducts,
     totalAmount,
@@ -111,15 +114,12 @@ if (normalizedPaymentType === "Prepaid") {
     transactionScreenshot,
     paymentDetails: finalPaymentDetails,
     siteOwner,
-    progress: "pending", 
-    
+    progress: "pending",
   });
 
   return sendResponse(res, 201, order, "Order placed successfully.");
 });
 
-
-// Get all orders by admin
 exports.getOrders = tryCatch(async (req, res) => {
   const adminId = req.userId;
 
@@ -132,7 +132,6 @@ exports.getOrders = tryCatch(async (req, res) => {
   return sendResponse(res, 200, orders);
 });
 
-// Update order progress
 exports.updateOrderProgress = tryCatch(async (req, res) => {
   const { id } = req.params;
   const { progress, orderCode, reason } = req.body;
@@ -156,7 +155,6 @@ exports.updateOrderProgress = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "Completed orders cannot be modified.");
   }
 
-  // Require reason if declined
   if (progress === "declined" && !reason) {
     return sendResponse(
       res,
@@ -166,7 +164,6 @@ exports.updateOrderProgress = tryCatch(async (req, res) => {
     );
   }
 
-  // Require orderCode if accepted or done
   if ((progress === "accepted" || progress === "done") && !orderCode) {
     return sendResponse(
       res,
@@ -176,7 +173,6 @@ exports.updateOrderProgress = tryCatch(async (req, res) => {
     );
   }
 
-  // Check for duplicate orderCode if provided
   if (
     (progress === "accepted" || progress === "done") &&
     orderCode !== order.orderCode
@@ -188,12 +184,10 @@ exports.updateOrderProgress = tryCatch(async (req, res) => {
     order.orderCode = orderCode;
   }
 
-  // Save reason if declined
   if (progress === "declined") {
     order.reason = reason;
   }
 
-  // Deduct stock if marking as done
   if (progress === "done") {
     for (const item of order.products) {
       const product = item.productId;
@@ -219,7 +213,6 @@ exports.updateOrderProgress = tryCatch(async (req, res) => {
   return sendResponse(res, 200, order, "Order status updated.");
 });
 
-// Delete order
 exports.deleteOrder = tryCatch(async (req, res) => {
   const { id } = req.params;
   const adminId = req.userId;
@@ -240,7 +233,6 @@ exports.deleteOrder = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "Cannot delete completed orders.");
   }
 
-  // Delete screenshot file if exists
   if (order.transactionScreenshot) {
     const localPath = path.join(
       __dirname,
@@ -257,7 +249,6 @@ exports.deleteOrder = tryCatch(async (req, res) => {
   return sendResponse(res, 200, null, "Order deleted.");
 });
 
-// Get single order
 exports.getOrderById = tryCatch(async (req, res) => {
   const { id } = req.params;
 

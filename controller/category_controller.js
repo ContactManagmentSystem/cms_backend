@@ -1,6 +1,7 @@
 const Category = require("../models/category");
 const { tryCatch } = require("../utils/try_catch");
 const { sendResponse } = require("../utils/response");
+const { validateFileType } = require("../utils/validate_file_type");
 const fs = require("fs");
 const path = require("path");
 
@@ -15,6 +16,12 @@ exports.createCategory = tryCatch(async (req, res) => {
 
   const exists = await Category.findOne({ name }).lean();
   if (exists) return sendResponse(res, 400, null, "Category already exists.");
+
+  //Validate file type
+  const validation = await validateFileType(file.path);
+  if (!validation.valid) {
+    return sendResponse(res, 400, null, validation.reason);
+  }
 
   const imageUrl = `https://backend.olivermenus.com/${file.path}`;
 
@@ -73,6 +80,12 @@ exports.updateCategory = tryCatch(async (req, res) => {
     return sendResponse(res, 403, null, "Access denied.");
 
   if (file) {
+    //Validate file type before replacing image
+    const validation = await validateFileType(file.path);
+    if (!validation.valid) {
+      return sendResponse(res, 400, null, validation.reason);
+    }
+
     const oldImagePath = path.join(__dirname, "..", category.image);
     if (fs.existsSync(oldImagePath)) {
       fs.unlink(oldImagePath, (err) => {

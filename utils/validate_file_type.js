@@ -1,5 +1,5 @@
-const { fileTypeFromBuffer } = require('file-type');
-const fs = require('fs/promises');
+const { fileTypeFromBuffer } = require("file-type");
+const fs = require("fs/promises");
 
 /**
  * Validates file type from disk using its buffer.

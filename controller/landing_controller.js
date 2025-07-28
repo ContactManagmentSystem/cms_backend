@@ -4,18 +4,17 @@ const Landing = require("../models/landing");
 const { tryCatch } = require("../utils/try_catch");
 const { sendResponse } = require("../utils/response");
 const { isValidObjectId } = require("../utils/is_valid_id");
+const { validateFileType } = require("../utils/validate_file_type");
 
 // Create a new landing (only one per admin)
 exports.createLanding = tryCatch(async (req, res) => {
   const { storeName, colourCode, currency = "MMK" } = req.body;
   const files = req.files;
 
-  // Validation: Ensure user ID is provided
   if (!req.userId) {
     return sendResponse(res, 400, null, "User ID is required.");
   }
 
-  // Validation: Ensure required fields are present
   if (!storeName || !colourCode) {
     return sendResponse(
       res,
@@ -25,25 +24,37 @@ exports.createLanding = tryCatch(async (req, res) => {
     );
   }
 
-  // Validation: Check main image upload
   if (!files || !files.image || files.image.length === 0) {
     return sendResponse(res, 400, null, "Main image file is required.");
   }
 
-  // Prevent multiple landing pages per user
+  // Validate main image
+  const mainImageValidation = await validateFileType(files.image[0].path);
+  if (!mainImageValidation.valid) {
+    return sendResponse(res, 400, null, mainImageValidation.reason);
+  }
+
+  // Validate hero images if provided
+  if (files.heroImage?.length > 0) {
+    for (let file of files.heroImage) {
+      const result = await validateFileType(file.path);
+      if (!result.valid) {
+        return sendResponse(res, 400, null, `Hero image error: ${result.reason}`);
+      }
+    }
+  }
+
   const existingLanding = await Landing.findOne({ owner: req.userId }).lean();
   if (existingLanding) {
     return sendResponse(res, 400, null, "You already have a landing page.");
   }
 
-  // Image processing
   const imageUrl = `https://backend.olivermenus.com/${files.image[0].path}`;
   const heroImageUrls =
     files.heroImage?.map(
       (file) => `https://backend.olivermenus.com/${file.path}`
     ) || [];
 
-  // Create landing document (without socialLinks)
   const landing = await Landing.create({
     storeName,
     colourCode,
@@ -60,8 +71,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
   const { id } = req.params;
   const { storeName, colourCode, deletedHeroImages } = req.body;
   const files = req.files;
-  // console.log(colourCode)
-  // Validate ID
+
   const validation = await isValidObjectId(id, Landing);
   if (!validation.valid) {
     return sendResponse(res, 400, null, validation.message);
@@ -73,7 +83,6 @@ exports.updateLanding = tryCatch(async (req, res) => {
     return sendResponse(res, 403, null, "Access denied.");
   }
 
-  // Update base fields (with safety fallback for colourCode)
   if (storeName) landing.storeName = storeName;
 
   if (colourCode && /^#([0-9A-F]{3}){1,2}$/i.test(colourCode)) {
@@ -82,18 +91,21 @@ exports.updateLanding = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "Invalid colourCode format.");
   }
 
-  // Handle main image replacement
   if (files?.image?.length > 0) {
+    // Validate updated main image
+    const mainImageValidation = await validateFileType(files.image[0].path);
+    if (!mainImageValidation.valid) {
+      return sendResponse(res, 400, null, mainImageValidation.reason);
+    }
+
     landing.image = `https://backend.olivermenus.com/${files.image[0].path}`;
   }
 
-  // HERO IMAGE UPDATE LOGIC
   let currentHeroImages = landing.heroImage || [];
 
   if (deletedHeroImages) {
     try {
       const toDelete = JSON.parse(deletedHeroImages);
-
       toDelete.forEach((imgUrl) => {
         const imgPath = path.join(
           __dirname,
@@ -104,7 +116,6 @@ exports.updateLanding = tryCatch(async (req, res) => {
           fs.unlinkSync(imgPath);
         }
       });
-
       currentHeroImages = currentHeroImages.filter(
         (img) => !toDelete.includes(img)
       );
@@ -113,7 +124,6 @@ exports.updateLanding = tryCatch(async (req, res) => {
     }
   }
 
-  // Validate image count
   const newHeroCount = files?.heroImage?.length || 0;
   const totalHeroCount = currentHeroImages.length + newHeroCount;
 
@@ -126,8 +136,14 @@ exports.updateLanding = tryCatch(async (req, res) => {
     );
   }
 
-  // Add new hero images
   if (files?.heroImage?.length > 0) {
+    for (let file of files.heroImage) {
+      const result = await validateFileType(file.path);
+      if (!result.valid) {
+        return sendResponse(res, 400, null, `Hero image error: ${result.reason}`);
+      }
+    }
+
     const newHeroImages = files.heroImage.map(
       (file) => `https://backend.olivermenus.com/${file.path}`
     );
@@ -141,15 +157,12 @@ exports.updateLanding = tryCatch(async (req, res) => {
   return sendResponse(res, 200, landing, "Landing updated successfully.");
 });
 
-// Get current user's landing
 exports.getMyLanding = tryCatch(async (req, res) => {
   const landing = await Landing.findOne({ owner: req.userId }).lean();
   if (!landing) return sendResponse(res, 200, null, "Landing haven't created.");
-
   return sendResponse(res, 200, landing);
 });
 
-// Get landing by ID (admin access only to own)
 exports.getLandingById = tryCatch(async (req, res) => {
   const { id } = req.params;
 
@@ -167,7 +180,6 @@ exports.getLandingById = tryCatch(async (req, res) => {
   return sendResponse(res, 200, landing);
 });
 
-// Delete landing (only by owner)
 exports.deleteLanding = tryCatch(async (req, res) => {
   const { id } = req.params;
 
@@ -186,7 +198,6 @@ exports.deleteLanding = tryCatch(async (req, res) => {
   return sendResponse(res, 200, null, "Landing deleted successfully.");
 });
 
-// Public: Get landing page of a specific admin
 exports.getPublicLandingByAdmin = tryCatch(async (req, res) => {
   const { adminId } = req.params;
   if (!adminId) {
@@ -207,7 +218,6 @@ exports.getPublicLandingByAdmin = tryCatch(async (req, res) => {
   return sendResponse(res, 200, landing, "Landing fetched successfully.");
 });
 
-// Update only the acceptPaymentTypes for the landing (owner only)
 exports.updatePaymentTypes = tryCatch(async (req, res) => {
   const { paymentTypes } = req.body;
   if (!Array.isArray(paymentTypes)) {
@@ -220,13 +230,11 @@ exports.updatePaymentTypes = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "Invalid payment type(s) provided.");
   }
 
-  // Find the landing belonging to the current user
   const landing = await Landing.findOne({ owner: req.userId });
   if (!landing) {
     return sendResponse(res, 404, null, "Landing not found for this user.");
   }
 
-  // Update the correct schema field: acceptPaymentTypes
   landing.acceptPaymentTypes = paymentTypes;
   await landing.save();
 
