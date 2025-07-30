@@ -5,7 +5,6 @@ const {
   getOrderById,
   updateOrderProgress,
   deleteOrder,
-  getOrdersByAdmin,
 } = require("../controller/order_controller");
 
 const { verifyToken, checkRole } = require("../middleware/checking_middleware");

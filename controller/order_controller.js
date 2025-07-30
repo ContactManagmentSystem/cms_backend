@@ -8,6 +8,7 @@ const { isValidObjectId } = require("../utils/is_valid_id");
 const path = require("path");
 const fs = require("fs");
 const { validateFileType } = require("../utils/validate_file_type");
+const mongoose = require("mongoose");
 
 exports.createOrder = tryCatch(async (req, res) => {
   const {
@@ -73,9 +74,15 @@ exports.createOrder = tryCatch(async (req, res) => {
 
   if (normalizedPaymentType === "Prepaid") {
     if (!req.file) {
-      return sendResponse(res, 400, null, "Transaction screenshot is required.");
+      return sendResponse(
+        res,
+        400,
+        null,
+        "Transaction screenshot is required."
+      );
     }
 
+    console.log(req.file)
     //Secure file type validation
     const { valid, reason } = await validateFileType(req.file.path);
     if (!valid) {
@@ -252,19 +259,32 @@ exports.deleteOrder = tryCatch(async (req, res) => {
 exports.getOrderById = tryCatch(async (req, res) => {
   const { id } = req.params;
 
-  const valid = await isValidObjectId(id, Order);
-  if (!valid.valid) {
-    return sendResponse(res, 400, null, valid.message);
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return sendResponse(res, 400, null, "Invalid order ID format.");
   }
 
   const order = await Order.findById(id)
-    .populate("products.productId", "name price")
-    .populate("paymentDetails.accountId", "platform accountNumber")
+    .select("-siteOwner -__v -updatedAt") 
+    .populate({
+      path: "products.productId",
+      select: "name price image", 
+      options: { lean: true },     
+    })
     .lean();
 
   if (!order) {
     return sendResponse(res, 404, null, "Order not found.");
   }
 
+  if (order.paymentDetails) {
+    const { paymentDetails } = order;
+    delete paymentDetails.accountId;
+    delete paymentDetails.paymentPlatformUserName;
+    delete paymentDetails.internalNote; 
+  }
+
+
   return sendResponse(res, 200, order);
 });
+
+

@@ -4,76 +4,55 @@ const User = require("../models/user");
 const { tryCatch } = require("../utils/try_catch");
 const { sendResponse } = require("../utils/response");
 const { isValidObjectId } = require("../utils/is_valid_id");
+const { validateFileType } = require("../utils/validate_file_type");
 const fs = require("fs");
 const path = require("path");
 
+// Create Product
 exports.createProduct = tryCatch(async (req, res) => {
-  const { name, price, discountPrice, category, stockCount, description } =
-    req.body;
+  const { name, price, discountPrice, category, stockCount, description } = req.body;
   const files = req.files;
 
-  // Validate user
   if (!req.userId) {
     return sendResponse(res, 400, null, "User ID is required.");
   }
 
-  // Validate required fields
   if (!name || !price || !category) {
-    return sendResponse(
-      res,
-      400,
-      null,
-      "Name, price, and category are required."
-    );
+    return sendResponse(res, 400, null, "Name, price, and category are required.");
   }
 
-  // Validate files
   if (!files || files.length === 0) {
-    return sendResponse(
-      res,
-      400,
-      null,
-      "At least one product image is required."
-    );
+    return sendResponse(res, 400, null, "At least one product image is required.");
   }
 
   if (files.length > 5) {
-    return sendResponse(
-      res,
-      400,
-      null,
-      "You can upload a maximum of 5 product images."
-    );
+    return sendResponse(res, 400, null, "You can upload a maximum of 5 product images.");
   }
 
-  // Validate category ID
+  // Validate MIME types
+  for (const file of files) {
+    const validation = await validateFileType(file.path);
+    if (!validation.valid) {
+      return sendResponse(res, 400, null, `Invalid file: ${validation.reason}`);
+    }
+  }
+
   if (!isValidObjectId(category)) {
     return sendResponse(res, 400, null, "Invalid category ID format.");
   }
 
-  // Check if category exists
   const categoryExists = await Category.findById(category).lean();
   if (!categoryExists) {
     return sendResponse(res, 404, null, "Category not found.");
   }
 
-  // Check for duplicate product name
   const existing = await Product.findOne({ name }).lean();
   if (existing) {
-    return sendResponse(
-      res,
-      400,
-      null,
-      `Product with name "${name}" already exists.`
-    );
+    return sendResponse(res, 400, null, `Product with name "${name}" already exists.`);
   }
 
-  // Prepare image URLs
-  const imageUrls = files.map(
-    (file) => `https://backend.olivermenus.com/${file.path}`
-  );
+  const imageUrls = files.map(file => `https://backend.olivermenus.com/${file.path}`);
 
-  // Create product
   const product = await Product.create({
     name,
     price,
@@ -88,21 +67,16 @@ exports.createProduct = tryCatch(async (req, res) => {
   return sendResponse(res, 201, product, "Product created successfully.");
 });
 
+// Get Products
 exports.getProducts = tryCatch(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
 
-  // Count products by the user
   const totalProducts = await Product.countDocuments({ owner: req.userId });
-
-  // Fetch user's limit info
-  const user = await User.findById(req.userId)
-    .select("productPostLimit")
-    .lean();
+  const user = await User.findById(req.userId).select("productPostLimit").lean();
   const productPostLimit = user?.productPostLimit || 0;
 
-  // Find products
   const products = await Product.find({ owner: req.userId })
     .populate("category", "name _id description image")
     .sort({ createdAt: -1 })
@@ -143,6 +117,7 @@ exports.getProductById = tryCatch(async (req, res) => {
   return sendResponse(res, 200, product);
 });
 
+// Update Product
 exports.updateProduct = tryCatch(async (req, res) => {
   const { id } = req.params;
   const {
@@ -156,44 +131,28 @@ exports.updateProduct = tryCatch(async (req, res) => {
   } = req.body;
   const files = req.files;
 
-  // Validate ID
   const validation = await isValidObjectId(id, Product);
   if (!validation.valid) {
     return sendResponse(res, 400, null, validation.message);
   }
 
-  // Find existing product
   const existingProduct = await Product.findById(id);
   if (!existingProduct) {
     return sendResponse(res, 404, null, "Product not found.");
   }
 
-  // Check ownership
   if (existingProduct.owner.toString() !== req.userId) {
     return sendResponse(res, 403, null, "Access denied. Not your product.");
   }
 
-  const updateData = {
-    name,
-    price,
-    discountPrice,
-    category,
-    stockCount,
-    description,
-  };
-
+  const updateData = { name, price, discountPrice, category, stockCount, description };
   let currentImages = existingProduct.images || [];
 
-  // Handle deleted images
   if (deletedImages) {
     try {
       const toDelete = JSON.parse(deletedImages);
       toDelete.forEach((imgUrl) => {
-        const imgPath = path.join(
-          __dirname,
-          "..",
-          imgUrl.replace(`https://backend.olivermenus.com/`, "")
-        );
+        const imgPath = path.join(__dirname, "..", imgUrl.replace(`https://backend.olivermenus.com/`, ""));
         if (fs.existsSync(imgPath)) {
           fs.unlinkSync(imgPath);
         }
@@ -204,7 +163,6 @@ exports.updateProduct = tryCatch(async (req, res) => {
     }
   }
 
-  // Limit total image count to 5
   const newImageCount = files?.length || 0;
   const totalImageCount = currentImages.length + newImageCount;
 
@@ -217,11 +175,16 @@ exports.updateProduct = tryCatch(async (req, res) => {
     );
   }
 
-  // Add new uploaded images
+  // Validate MIME types of new images
   if (files && files.length > 0) {
-    const newImages = files.map(
-      (file) => `https://backend.olivermenus.com/${file.path}`
-    );
+    for (const file of files) {
+      const validation = await validateFileType(file.path);
+      if (!validation.valid) {
+        return sendResponse(res, 400, null, `Invalid file: ${validation.reason}`);
+      }
+    }
+
+    const newImages = files.map(file => `https://backend.olivermenus.com/${file.path}`);
     currentImages = [...currentImages, ...newImages];
   }
 
@@ -232,14 +195,8 @@ exports.updateProduct = tryCatch(async (req, res) => {
     runValidators: true,
   }).lean();
 
-  return sendResponse(
-    res,
-    200,
-    updatedProduct,
-    "Product updated successfully."
-  );
+  return sendResponse(res, 200, updatedProduct, "Product updated successfully.");
 });
-
 
 // Delete Product
 exports.deleteProduct = tryCatch(async (req, res) => {
@@ -273,7 +230,7 @@ exports.getProductsByAdmin = tryCatch(async (req, res) => {
   const query = { owner: adminId };
 
   if (search) {
-    query.name = { $regex: search, $options: "i" }; // case-insensitive search
+    query.name = { $regex: search, $options: "i" };
   }
 
   const products = await Product.find(query)
