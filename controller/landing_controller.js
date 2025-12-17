@@ -95,7 +95,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
 
   /* ---------------- Basic fields ---------------- */
 
-  if (storeName) {
+  if (storeName !== undefined) {
     landing.storeName = storeName;
   }
 
@@ -106,38 +106,15 @@ exports.updateLanding = tryCatch(async (req, res) => {
     landing.colourCode = colourCode;
   }
 
-  /* ---------------- Currency setup ---------------- */
+  /* ---------------- Currency (FREE STRING) ---------------- */
 
   if (currency !== undefined) {
-    if (
-      typeof currency !== "object" ||
-      !currency.code ||
-      typeof currency.code !== "string"
-    ) {
-      return sendResponse(res, 400, null, "Invalid currency format.");
+    if (typeof currency !== "string") {
+      return sendResponse(res, 400, null, "Currency must be a string.");
     }
 
-    const allowedCurrencies = {
-      MMK: "Ks",
-      USD: "$",
-      THB: "฿",
-    };
-
-    const code = currency.code.toUpperCase();
-
-    if (!allowedCurrencies[code]) {
-      return sendResponse(
-        res,
-        400,
-        null,
-        `Unsupported currency code: ${currency.code}`
-      );
-    }
-
-    landing.currency = {
-      code,
-      symbol: currency.symbol || allowedCurrencies[code],
-    };
+    // optional safety trim, no restriction
+    landing.currency = currency.trim();
   }
 
   /* ---------------- Main image ---------------- */
@@ -219,6 +196,7 @@ exports.updateLanding = tryCatch(async (req, res) => {
 
   return sendResponse(res, 200, landing, "Landing updated successfully.");
 });
+
 
 exports.getMyLanding = tryCatch(async (req, res) => {
   const landing = await Landing.findOne({ owner: req.userId }).lean();
