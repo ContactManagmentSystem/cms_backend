@@ -39,7 +39,12 @@ exports.createLanding = tryCatch(async (req, res) => {
     for (let file of files.heroImage) {
       const result = await validateFileType(file.path);
       if (!result.valid) {
-        return sendResponse(res, 400, null, `Hero image error: ${result.reason}`);
+        return sendResponse(
+          res,
+          400,
+          null,
+          `Hero image error: ${result.reason}`
+        );
       }
     }
   }
@@ -69,8 +74,10 @@ exports.createLanding = tryCatch(async (req, res) => {
 
 exports.updateLanding = tryCatch(async (req, res) => {
   const { id } = req.params;
-  const { storeName, colourCode, deletedHeroImages } = req.body;
+  const { storeName, colourCode, deletedHeroImages, currency } = req.body;
   const files = req.files;
+
+  /* ---------------- ObjectId validation ---------------- */
 
   const validation = await isValidObjectId(id, Landing);
   if (!validation.valid) {
@@ -78,21 +85,64 @@ exports.updateLanding = tryCatch(async (req, res) => {
   }
 
   const landing = await Landing.findById(id);
-  if (!landing) return sendResponse(res, 404, null, "Landing not found.");
+  if (!landing) {
+    return sendResponse(res, 404, null, "Landing not found.");
+  }
+
   if (landing.owner.toString() !== req.userId) {
     return sendResponse(res, 403, null, "Access denied.");
   }
 
-  if (storeName) landing.storeName = storeName;
+  /* ---------------- Basic fields ---------------- */
 
-  if (colourCode && /^#([0-9A-F]{3}){1,2}$/i.test(colourCode)) {
-    landing.colourCode = colourCode;
-  } else if (colourCode !== undefined) {
-    return sendResponse(res, 400, null, "Invalid colourCode format.");
+  if (storeName) {
+    landing.storeName = storeName;
   }
 
+  if (colourCode !== undefined) {
+    if (!/^#([0-9A-F]{3}){1,2}$/i.test(colourCode)) {
+      return sendResponse(res, 400, null, "Invalid colourCode format.");
+    }
+    landing.colourCode = colourCode;
+  }
+
+  /* ---------------- Currency setup ---------------- */
+
+  if (currency !== undefined) {
+    if (
+      typeof currency !== "object" ||
+      !currency.code ||
+      typeof currency.code !== "string"
+    ) {
+      return sendResponse(res, 400, null, "Invalid currency format.");
+    }
+
+    const allowedCurrencies = {
+      MMK: "Ks",
+      USD: "$",
+      THB: "฿",
+    };
+
+    const code = currency.code.toUpperCase();
+
+    if (!allowedCurrencies[code]) {
+      return sendResponse(
+        res,
+        400,
+        null,
+        `Unsupported currency code: ${currency.code}`
+      );
+    }
+
+    landing.currency = {
+      code,
+      symbol: currency.symbol || allowedCurrencies[code],
+    };
+  }
+
+  /* ---------------- Main image ---------------- */
+
   if (files?.image?.length > 0) {
-    // Validate updated main image
     const mainImageValidation = await validateFileType(files.image[0].path);
     if (!mainImageValidation.valid) {
       return sendResponse(res, 400, null, mainImageValidation.reason);
@@ -101,21 +151,26 @@ exports.updateLanding = tryCatch(async (req, res) => {
     landing.image = `https://backend.olivermenus.com/${files.image[0].path}`;
   }
 
+  /* ---------------- Hero images ---------------- */
+
   let currentHeroImages = landing.heroImage || [];
 
   if (deletedHeroImages) {
     try {
       const toDelete = JSON.parse(deletedHeroImages);
+
       toDelete.forEach((imgUrl) => {
         const imgPath = path.join(
           __dirname,
           "..",
-          imgUrl.replace(`https://backend.olivermenus.com/`, "")
+          imgUrl.replace("https://backend.olivermenus.com/", "")
         );
+
         if (fs.existsSync(imgPath)) {
           fs.unlinkSync(imgPath);
         }
       });
+
       currentHeroImages = currentHeroImages.filter(
         (img) => !toDelete.includes(img)
       );
@@ -137,20 +192,28 @@ exports.updateLanding = tryCatch(async (req, res) => {
   }
 
   if (files?.heroImage?.length > 0) {
-    for (let file of files.heroImage) {
+    for (const file of files.heroImage) {
       const result = await validateFileType(file.path);
       if (!result.valid) {
-        return sendResponse(res, 400, null, `Hero image error: ${result.reason}`);
+        return sendResponse(
+          res,
+          400,
+          null,
+          `Hero image error: ${result.reason}`
+        );
       }
     }
 
     const newHeroImages = files.heroImage.map(
       (file) => `https://backend.olivermenus.com/${file.path}`
     );
+
     currentHeroImages = [...currentHeroImages, ...newHeroImages];
   }
 
   landing.heroImage = currentHeroImages;
+
+  /* ---------------- Save ---------------- */
 
   await landing.save();
 
