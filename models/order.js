@@ -63,8 +63,22 @@ const orderSchema = new mongoose.Schema(
     },
     transactionScreenshot: {
       type: String,
+      // required: function () {
+      //   return this.paymentType === "Prepaid";
+      // },
+    },
+    orderName: { type: String, default: "" },
+    paymentScreenshot: {
+      type: [String],
       required: function () {
         return this.paymentType === "Prepaid";
+      },
+      default: [],
+      validate: {
+        validator: function (value) {
+          return Array.isArray(value) && value.length > 0;
+        },
+        message: "At least one payment screenshot is required.",
       },
     },
     paymentDetails: {

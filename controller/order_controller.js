@@ -12,6 +12,7 @@ const mongoose = require("mongoose");
 
 exports.createOrder = tryCatch(async (req, res) => {
   const {
+    orderName,
     products,
     phonePrimary,
     phoneSecondary = "",
@@ -21,23 +22,30 @@ exports.createOrder = tryCatch(async (req, res) => {
     siteOwner,
   } = req.body;
 
+  /* ---------------------------------------------------
+     BASIC VALIDATION
+  --------------------------------------------------- */
+
   if (!products || !Array.isArray(products) || products.length === 0) {
     return sendResponse(res, 400, null, "At least one product is required.");
   }
 
-  if (!address || !phonePrimary || !paymentType || !siteOwner) {
+  if (!address || !phonePrimary || !paymentType || !siteOwner|| !orderName) {
     return sendResponse(res, 400, null, "Missing required fields.");
   }
 
   const normalizedPaymentType = paymentType.trim();
+
+  /* ---------------------------------------------------
+     LANDING VALIDATION
+  --------------------------------------------------- */
 
   const landing = await Landing.findOne({ owner: siteOwner }).lean();
   if (!landing) {
     return sendResponse(res, 404, null, "Store landing not found.");
   }
 
-  const isAccepted = landing.acceptPaymentTypes.includes(normalizedPaymentType);
-  if (!isAccepted) {
+  if (!landing.acceptPaymentTypes.includes(normalizedPaymentType)) {
     return sendResponse(
       res,
       400,
@@ -45,6 +53,10 @@ exports.createOrder = tryCatch(async (req, res) => {
       `This store does not accept ${normalizedPaymentType} payments.`
     );
   }
+
+  /* ---------------------------------------------------
+     PRODUCT VERIFICATION
+  --------------------------------------------------- */
 
   let totalAmount = 0;
   const verifiedProducts = [];
@@ -63,35 +75,50 @@ exports.createOrder = tryCatch(async (req, res) => {
       product.discountPrice && product.discountPrice > 0
         ? product.discountPrice
         : 0;
-    const price = product.price - discount;
 
-    totalAmount += price * quantity;
+    totalAmount += (product.price - discount) * quantity;
     verifiedProducts.push({ productId: product._id, quantity });
   }
 
-  let transactionScreenshot = null;
+  /* ---------------------------------------------------
+     PAYMENT HANDLING
+  --------------------------------------------------- */
+
+  // let transactionScreenshot = null; // legacy
+  let paymentScreenshot = [];
   let finalPaymentDetails = {};
 
   if (normalizedPaymentType === "Prepaid") {
-    if (!req.file) {
+    const paymentFiles = req.files?.paymentScreenshot;
+
+    if (!paymentFiles || paymentFiles.length === 0) {
       return sendResponse(
         res,
         400,
         null,
-        "Transaction screenshot is required."
+        "At least one payment screenshot is required."
       );
     }
 
-    console.log(req.file)
-    //Secure file type validation
-    const { valid, reason } = await validateFileType(req.file.path);
-    if (!valid) {
-      // Clean up invalid file
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (_) {}
-      return sendResponse(res, 400, null, `Invalid file: ${reason}`);
+    // Validate each uploaded file
+    for (const file of paymentFiles) {
+      const { valid, reason } = await validateFileType(file.path);
+      if (!valid) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (_) {}
+        return sendResponse(res, 400, null, `Invalid file: ${reason}`);
+      }
+
+      paymentScreenshot.push(
+        `https://backend.olivermenus.com/${file.path}`
+      );
     }
+
+    // Legacy support (optional)
+    // if (req.files?.transactionScreenshot?.[0]) {
+    //   transactionScreenshot = `https://backend.olivermenus.com/${req.files.transactionScreenshot[0].path}`;
+    // }
 
     if (
       !paymentDetails ||
@@ -107,18 +134,23 @@ exports.createOrder = tryCatch(async (req, res) => {
       return sendResponse(res, 404, null, "Payment account not found.");
     }
 
-    transactionScreenshot = `https://backend.olivermenus.com/${req.file.path}`;
     finalPaymentDetails = paymentDetails;
   }
 
+  /* ---------------------------------------------------
+     CREATE ORDER
+  --------------------------------------------------- */
+
   const order = await Order.create({
     products: verifiedProducts,
+    orderName,
     totalAmount,
     address,
     phonePrimary,
     phoneSecondary,
     paymentType: normalizedPaymentType,
-    transactionScreenshot,
+    paymentScreenshot,        // new canonical field
+    // transactionScreenshot,    // legacy (optional)
     paymentDetails: finalPaymentDetails,
     siteOwner,
     progress: "pending",
@@ -126,6 +158,7 @@ exports.createOrder = tryCatch(async (req, res) => {
 
   return sendResponse(res, 201, order, "Order placed successfully.");
 });
+
 
 exports.getOrders = tryCatch(async (req, res) => {
   const adminId = req.userId;
@@ -225,7 +258,9 @@ exports.deleteOrder = tryCatch(async (req, res) => {
   const adminId = req.userId;
 
   const valid = await isValidObjectId(id, Order);
-  if (!valid.valid) return sendResponse(res, 400, null, valid.message);
+  if (!valid.valid) {
+    return sendResponse(res, 400, null, valid.message);
+  }
 
   const order = await Order.findById(id);
   if (!order) {
@@ -240,21 +275,54 @@ exports.deleteOrder = tryCatch(async (req, res) => {
     return sendResponse(res, 400, null, "Cannot delete completed orders.");
   }
 
+  /* ---------------------------------------------------
+     DELETE PAYMENT SCREENSHOTS (NEW)
+  --------------------------------------------------- */
+
+  if (Array.isArray(order.paymentScreenshot)) {
+    for (const url of order.paymentScreenshot) {
+      if (!url) continue;
+
+      const localPath = path.join(
+        __dirname,
+        "..",
+        url.replace("https://backend.olivermenus.com/", "")
+      );
+
+      if (fs.existsSync(localPath)) {
+        fs.unlinkSync(localPath);
+      }
+    }
+  }
+
+  /* ---------------------------------------------------
+     DELETE LEGACY TRANSACTION SCREENSHOT (OLD)
+  --------------------------------------------------- */
+
   if (order.transactionScreenshot) {
     const localPath = path.join(
       __dirname,
       "..",
       order.transactionScreenshot.replace(
-        `https://backend.olivermenus.com/`,
+        "https://backend.olivermenus.com/",
         ""
       )
     );
-    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+
+    if (fs.existsSync(localPath)) {
+      fs.unlinkSync(localPath);
+    }
   }
 
+  /* ---------------------------------------------------
+     DELETE ORDER
+  --------------------------------------------------- */
+
   await order.deleteOne();
+
   return sendResponse(res, 200, null, "Order deleted.");
 });
+
 
 exports.getOrderById = tryCatch(async (req, res) => {
   const { id } = req.params;

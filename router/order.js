@@ -13,7 +13,15 @@ const upload = require("../middleware/file_upload");
 const router = express.Router();
 
 //public create order and getOrderByID
-router.post("/", upload.single("transactionScreenshot"), createOrder);
+router.post(
+  "/",
+  upload.fields([
+    { name: "transactionScreenshot", maxCount: 1 }, // legacy
+    { name: "paymentScreenshot", maxCount: 10 },     // new
+  ]),
+  createOrder
+);
+
 router.get("/:id", getOrderById);
 
 //private route
